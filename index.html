@@ -24,12 +24,19 @@
             transition: transform 0.05s linear, box-shadow 0.05s linear;
             image-rendering: pixelated; 
         }
-        .btn-8bit:hover {
+        .btn-8bit:hover:not(:disabled) { /* Adicionado :not(:disabled) */
             background-color: #B0B0B0; 
         }
-        .btn-8bit:active {
+        .btn-8bit:active:not(:disabled) { /* Adicionado :not(:disabled) */
             transform: translate(2px, 2px);
             box-shadow: 2px 2px 0px #000000;
+        }
+        .btn-8bit:disabled { /* Estilo para botão desabilitado */
+            background-color: #777777;
+            color: #A0A0A0;
+            border-color: #505050;
+            box-shadow: 2px 2px 0px #505050;
+            cursor: not-allowed;
         }
         .card {
             background-color: #4A4A70; 
@@ -42,6 +49,7 @@
             justify-content: center;
             text-align: center;
             min-height: 60px; 
+            cursor: pointer;
         }
         .card.selected {
             background-color: #7070A0; 
@@ -77,7 +85,7 @@
             border-color: #107010;
             box-shadow: 4px 4px 0px #107010;
         }
-         .btn-sound.active:hover {
+         .btn-sound.active:hover:not(:disabled) { /* Adicionado :not(:disabled) */
             background-color: #208020;
         }
         .btn-sound.inactive {
@@ -86,7 +94,7 @@
             border-color: #701010;
             box-shadow: 4px 4px 0px #701010;
         }
-        .btn-sound.inactive:hover {
+        .btn-sound.inactive:hover:not(:disabled) { /* Adicionado :not(:disabled) */
             background-color: #802020;
         }
         .feedback-correct {
@@ -104,7 +112,8 @@
         @media (min-width: 640px) { .card-grid { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); } }
         @media (min-width: 768px) { .card-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); } }
         @media (min-width: 1024px) { .card-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); } }
-        .fullscreen-message {
+        
+        .fullscreen-message, #loading-screen { /* Aplicado a ambas as telas de mensagem e carregamento */
             display: none;
             position: fixed;
             inset: 0;
@@ -118,6 +127,23 @@
             padding: 1rem;
             border: 8px solid #FFFFFF;
         }
+        /* Estilo específico para o spinner de carregamento */
+        .loader {
+            border: 8px solid #f3f3f3; /* Cinza claro */
+            border-top: 8px solid #FFD700; /* Amarelo pixelado */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1.5s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+
         .text-5xl { font-size: 2rem; line-height: 2.2rem; }
         .text-2xl { font-size: 1.25rem; line-height: 1.5rem; }
         .text-xl { font-size: 1rem; line-height: 1.25rem; }
@@ -273,6 +299,11 @@
             <button id="defeat-main-menu-button" class="btn-8bit bg-sky-500 text-white border-sky-700 shadow-sky-700 hover:bg-sky-600 text-base sm:text-lg">Menu Principal</button>
         </div>
     </div>
+    
+    <div id="loading-screen">
+        <div class="loader"></div>
+        <p class="text-xl">Carregando o jogo...</p>
+    </div>
 
     <script>
         // --- DOM Elements ---
@@ -302,10 +333,11 @@
         const defeatScreen = document.getElementById('defeat-screen');
         const defeatPlayAgainButton = document.getElementById('defeat-play-again-button');
         const defeatMainMenuButton = document.getElementById('defeat-main-menu-button');
+        const loadingScreen = document.getElementById('loading-screen'); 
 
         // --- Game Configuration ---
         const MAX_LEVELS = 6;
-        const CARDS_PER_LEVEL = [1, 3, 5, 8, 13, 21];
+        const CARDS_PER_LEVEL = [1, 3, 5, 8, 13, 21]; // Ajustado para ter 6 níveis
         const ALL_PROPOSITION_NAMES = ['p', 'q', 'r', 's', 't'];
         const INITIAL_LIVES = 3;
 
@@ -315,7 +347,7 @@
         let currentPropositions = {};
         let gameCardsData = [];
         let musicOn = true; 
-        let sfxOn = true;    
+        let sfxOn = true;     
         let soundsReady = false; 
         let audioContextStarted = false; 
 
@@ -323,18 +355,23 @@
         let clickSound, correctSoundFX, wrongSoundFX;
         let backgroundMusic, victoryMusic, defeatMusic;
 
-        const userBackgroundMusicPath = "musicabackground.mp3";
-        const userVictoryMusicPath    = "musicavitoria.mp3";
-        const userDefeatMusicPath     = "musicaderrota.mp3";
+        // --- CAMINHOS DOS ARQUIVOS DE MÚSICA ---
+        // Substitua pelos caminhos corretos se estiver usando arquivos locais.
+        // Se não tiver, pode deixar como string vazia ou null para não carregar.
+        const userBackgroundMusicPath = "musicabackground.mp3"; // Ex: "assets/music/background.mp3"
+        const userVictoryMusicPath    = "musicavitoria.mp3";    // Ex: "assets/music/victory.mp3"
+        const userDefeatMusicPath     = "musicaderrota.mp3";    // Ex: "assets/music/defeat.mp3"
 
         function setupSounds() {
             console.log("setupSounds: Iniciando configuração de sons.");
             if (typeof Tone !== 'undefined') {
+                // Efeitos sonoros básicos (gerados)
                 clickSound = new Tone.Synth({ oscillator: { type: 'square', width: 0.2 }, envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 }, volume: -15 }).toDestination();
                 correctSoundFX = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.05, release: 0.1 }, volume: -10 }).toDestination();
                 wrongSoundFX = new Tone.Synth({ oscillator: { type: 'sawtooth', detune: 20 }, envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 }, volume: -10 }).toDestination();
                 console.log("setupSounds: Efeitos sonoros (click, correct, wrong) criados.");
 
+                // Música de fundo
                 if (userBackgroundMusicPath) {
                     console.log(`setupSounds: Criando Tone.Player para música de fundo: ${userBackgroundMusicPath}`);
                     backgroundMusic = new Tone.Player({
@@ -347,6 +384,7 @@
                     backgroundMusic = null;
                 }
 
+                // Música de vitória
                 if (userVictoryMusicPath) {
                     console.log(`setupSounds: Criando Tone.Player para música de vitória: ${userVictoryMusicPath}`);
                     victoryMusic = new Tone.Player({
@@ -359,6 +397,7 @@
                     victoryMusic = null;
                 }
 
+                // Música de derrota
                 if (userDefeatMusicPath) {
                     console.log(`setupSounds: Criando Tone.Player para música de derrota: ${userDefeatMusicPath}`);
                     defeatMusic = new Tone.Player({
@@ -371,26 +410,27 @@
                     defeatMusic = null;
                 }
                 
-                soundsReady = true; // Indica que os objetos Tone foram criados. O carregamento dos MP3s é assíncrono.
+                soundsReady = true; 
                 console.log("setupSounds: Objetos Tone criados. soundsReady = true.");
             } else {
                 console.error("setupSounds: Tone.js não está definido! Sons não podem ser configurados.");
-                sfxOn = false; musicOn = false;
+                sfxOn = false; musicOn = false; // Desativa os sons se Tone.js não estiver presente
             }
-            updateSoundButtonStates();
+            updateSoundButtonStates(); // Atualiza os botões mesmo se Tone.js falhar
         }
         
         async function ensureAudioContextStarted() {
             if (typeof Tone === 'undefined') {
                 console.error("ensureAudioContextStarted: Tone.js não está definido.");
-                return false;
+                return false; // Retorna false se Tone não estiver definido
             }
             if (Tone.context.state !== 'running') {
                 console.log("ensureAudioContextStarted: AudioContext não está rodando. Tentando Tone.start().");
                 try {
                     await Tone.start();
-                    audioContextStarted = true; // Marcar que o contexto foi iniciado com sucesso
+                    audioContextStarted = true; 
                     console.log("ensureAudioContextStarted: Tone.start() SUCESSO. AudioContext.state:", Tone.context.state);
+                    // Garante que o transporte esteja iniciado também
                     if (Tone.Transport.state !== "started") {
                         Tone.Transport.start(); 
                         console.log("ensureAudioContextStarted: Tone.Transport iniciado.");
@@ -398,35 +438,43 @@
                     return true;
                 } catch (e) {
                     console.error("ensureAudioContextStarted: Falha ao iniciar AudioContext com Tone.start():", e);
-                    audioContextStarted = false; // Marcar que falhou
-                    return false;
+                    audioContextStarted = false; 
+                    return false; // Retorna false em caso de erro
                 }
             }
-            // Se já estava rodando, marca como iniciado e garante o transporte
+            // Se o contexto já estava rodando, marca como iniciado e verifica o transporte
             if (!audioContextStarted) audioContextStarted = true; 
             if (Tone.Transport.state !== "started") { 
                  Tone.Transport.start();
                  console.log("ensureAudioContextStarted: Tone.Transport iniciado (contexto já rodava).");
             }
-            return true;
+            return true; // Retorna true se o contexto já estava rodando
         }
 
+        // Função unificada para tocar sons, que primeiro garante que o contexto de áudio está ativo.
         async function playSound(type) {
-            if (!audioContextStarted) { // Verificação primária
-                console.warn(`playSound: AudioContext não iniciado. Som '${type}' não pode ser tocado.`);
+            // Não tenta tocar som se o contexto de áudio não pôde ser iniciado de forma alguma.
+            if (!audioContextStarted) { 
+                // console.warn(`playSound: AudioContext não iniciado. Som '${type}' não pode ser tocado.`);
                 return;
             }
+
+            // Verifica se Tone.js e os objetos de som estão prontos
             if (typeof Tone === 'undefined' || !soundsReady) {
                  if (!soundsReady) console.warn(`playSound: Sons não prontos (soundsReady: false). Som '${type}' não pode ser tocado.`);
                  if (typeof Tone === 'undefined') console.error("playSound: Tone não definido.");
                 return;
             }
-            playSoundInternal(type);
+            playSoundInternal(type); // Chama a função interna que realmente toca o som
         }
 
+        // Função interna para tocar sons (chamada por playSound após as verificações)
         function playSoundInternal(type) {
+            // Verificações adicionais (redundantes se playSound for sempre usada, mas bom para segurança)
             if (typeof Tone === 'undefined' || !Tone.Transport || !soundsReady || !audioContextStarted) return;
+
             try {
+                // Efeitos sonoros
                 if (sfxOn) {
                     switch (type) {
                         case 'click': if(clickSound) clickSound.triggerAttackRelease('C6', '32n', Tone.now()); break;
@@ -441,14 +489,17 @@
                     }
                 }
 
+                // Músicas (vitória/derrota) ou música de fundo (controlada por handleMusicToggleLogic)
+                // Apenas músicas de vitória/derrota são controladas diretamente aqui se musicOn estiver true
+                // ou se sfxOn estiver true (para garantir que a música de vitória/derrota toque mesmo se a música de fundo estiver desligada)
                 if (musicOn || (sfxOn && (type === 'victory' || type === 'defeat'))) {
                     switch (type) {
                         case 'victory':
                             if (backgroundMusic && backgroundMusic.loaded && backgroundMusic.state === "started") backgroundMusic.stop();
                             if (victoryMusic && victoryMusic.loaded) {
                                 console.log("playSoundInternal: Tocando música de vitória.");
-                                victoryMusic.start(0);
-                            } else if (!victoryMusic || (victoryMusic && !victoryMusic.loaded)) { // Adicionado (victoryMusic && !victoryMusic.loaded)
+                                victoryMusic.start(0); // Toca do início
+                            } else if (!victoryMusic || (victoryMusic && !victoryMusic.loaded)) { 
                                 console.warn("playSoundInternal: Música de vitória não disponível ou não carregada.");
                             }
                             break;
@@ -456,8 +507,8 @@
                             if (backgroundMusic && backgroundMusic.loaded && backgroundMusic.state === "started") backgroundMusic.stop();
                              if (defeatMusic && defeatMusic.loaded) {
                                 console.log("playSoundInternal: Tocando música de derrota.");
-                                defeatMusic.start(0);
-                            } else if (!defeatMusic || (defeatMusic && !defeatMusic.loaded)) { // Adicionado (defeatMusic && !defeatMusic.loaded)
+                                defeatMusic.start(0); // Toca do início
+                            } else if (!defeatMusic || (defeatMusic && !defeatMusic.loaded)) { 
                                 console.warn("playSoundInternal: Música de derrota não disponível ou não carregada.");
                             }
                             break;
@@ -478,14 +529,16 @@
                 defeatMusic.stop(); console.log("stopAllMusic: Música de derrota parada.");
             }
         }
-
+        
+        // Lógica para tocar/parar música de fundo
         function handleMusicToggleLogic() {
             console.log(`handleMusicToggleLogic: musicOn: ${musicOn}, initialScreen hidden: ${initialScreen.classList.contains('hidden')}, backgroundMusic: ${!!backgroundMusic}, backgroundMusic.loaded: ${backgroundMusic ? backgroundMusic.loaded : 'N/A'}, audioContextStarted: ${audioContextStarted}`);
             if (musicOn) {
+                // Só toca música de fundo se estiver na tela do jogo e a música estiver carregada e o contexto de áudio iniciado
                 if (initialScreen.classList.contains('hidden') && backgroundMusic && backgroundMusic.loaded && audioContextStarted) {
-                    stopAllMusic(); 
+                    stopAllMusic(); // Para outras músicas antes de iniciar a de fundo
                     if (backgroundMusic.state !== "started") {
-                        backgroundMusic.volume.value = -12;
+                        backgroundMusic.volume.value = -12; // Ajuste o volume conforme necessário
                         backgroundMusic.start();
                         console.log("handleMusicToggleLogic: Música de fundo INICIADA.");
                     }
@@ -493,6 +546,7 @@
                      if(!initialScreen.classList.contains('hidden')) console.log("handleMusicToggleLogic: Não tocou música (na tela inicial).");
                 }
             } else {
+                // Para a música de fundo se musicOn for false
                 if (backgroundMusic && backgroundMusic.loaded && backgroundMusic.state === "started") {
                     backgroundMusic.stop();
                     console.log("handleMusicToggleLogic: Música de fundo PARADA.");
@@ -503,9 +557,10 @@
         async function toggleMusic() {
             musicOn = !musicOn; 
             console.log(`toggleMusic: musicOn agora é ${musicOn}.`);
-            if (!audioContextStarted) await ensureAudioContextStarted(); 
-            playSound('click'); 
+            if (!audioContextStarted) await ensureAudioContextStarted(); // Garante o contexto antes de tocar o clique
+            playSound('click'); // Toca o som de clique
             
+            // Só manipula a música de fundo se os sons estiverem prontos e o contexto de áudio iniciado
             if (soundsReady && audioContextStarted) {
                 handleMusicToggleLogic();
             } else {
@@ -517,12 +572,12 @@
         async function toggleSfx() {
             sfxOn = !sfxOn;
             console.log(`toggleSfx: sfxOn agora é ${sfxOn}.`);
-            if (!audioContextStarted) await ensureAudioContextStarted(); 
-            playSound('click'); 
+            if (!audioContextStarted) await ensureAudioContextStarted(); // Garante o contexto antes de tocar o clique
+            playSound('click'); // Toca o som de clique (se SFX estava ligado antes de desligar, ou se ligou agora)
             updateSoundButtonStates();
         }
 
-        function updateSoundButtonStates() { /* ... (sem alterações) ... */ 
+        function updateSoundButtonStates() { 
             const musicText = `Música: ${musicOn ? 'ON' : 'OFF'}`;
             const sfxText = `Efeitos: ${sfxOn ? 'ON' : 'OFF'}`;
             [musicToggleButtonInitial, musicToggleButtonGame].forEach(btn => {
@@ -532,43 +587,57 @@
                 if (btn) { btn.textContent = sfxText; btn.classList.toggle('active', sfxOn); btn.classList.toggle('inactive', !sfxOn); }
             });
         }
-        function showScreen(screenName) { /* ... (sem alterações, mas a lógica de parar música aqui é importante) ... */ 
-            initialScreen.classList.add('hidden'); gameScreen.classList.add('hidden');
-            victoryScreen.style.display = 'none'; defeatScreen.style.display = 'none';
 
+        // --- Screen Management ---
+        function showScreen(screenName) { 
+            // Esconde todas as telas principais
+            initialScreen.classList.add('hidden');
+            gameScreen.classList.add('hidden');
+            victoryScreen.style.display = 'none'; // Usando style.display para flex
+            defeatScreen.style.display = 'none';  // Usando style.display para flex
+            loadingScreen.style.display = 'none'; // Garante que a tela de carregamento seja escondida
+
+            // Mostra a tela solicitada
             if (screenName === 'initial') initialScreen.classList.remove('hidden');
             else if (screenName === 'game') gameScreen.classList.remove('hidden');
             else if (screenName === 'victory') victoryScreen.style.display = 'flex';
             else if (screenName === 'defeat') defeatScreen.style.display = 'flex';
+            else if (screenName === 'loading') loadingScreen.style.display = 'flex'; // Mostra tela de carregamento
             
-            updateSoundButtonStates();
+            updateSoundButtonStates(); // Atualiza botões de som em todas as transições de tela
+
+            // Para a música de fundo se não estivermos na tela do jogo
             if (screenName !== 'game' && backgroundMusic && backgroundMusic.loaded && backgroundMusic.state === "started") {
                 console.log(`showScreen: Saindo da tela do jogo ('${screenName}'), parando música de fundo.`);
                 backgroundMusic.stop();
             }
         }
-        function showModal(title, message, onOk = () => {}) { /* ... (sem alterações) ... */ 
-            modalTitle.textContent = title; modalMessage.innerHTML = message;
+
+        function showModal(title, message, onOk = () => {}) { 
+            modalTitle.textContent = title;
+            modalMessage.innerHTML = message; // Usar innerHTML para permitir <br>
             messageModal.style.display = 'flex';
+
+            // Recria o botão OK para evitar múltiplos listeners
             const newOkButton = modalCloseButton.cloneNode(true);
             modalCloseButton.parentNode.replaceChild(newOkButton, modalCloseButton);
             modalCloseButton = newOkButton;
+
             modalCloseButton.onclick = () => {
                 playSound('click');
                 messageModal.style.display = 'none';
-                onOk();
+                onOk(); // Executa o callback fornecido
             };
         }
 
         async function startGame() {
             console.log("startGame: Iniciando jogo...");
-            currentLevel = 0; lives = INITIAL_LIVES;
-            stopAllMusic(); 
-            showScreen('game'); 
-
-            // AudioContext já deve ter sido iniciado pelo playButton.
-            // soundsReady já deve ser true.
-            // Tone.loaded() já deve ter sido esperado no playButton.
+            currentLevel = 0;
+            lives = INITIAL_LIVES;
+            stopAllMusic(); // Para qualquer música que esteja tocando
+            
+            // A tela do jogo só será mostrada após o carregamento no listener do playButton
+            // showScreen('game'); // Movido para depois do carregamento
 
             console.log(`startGame: Verificando condições para música de fundo. musicOn: ${musicOn}, backgroundMusic: ${!!backgroundMusic}, backgroundMusic.loaded: ${backgroundMusic ? backgroundMusic.loaded : 'N/A'}, audioContextStarted: ${audioContextStarted}`);
             if (musicOn && backgroundMusic && backgroundMusic.loaded && audioContextStarted) {
@@ -584,11 +653,12 @@
             }
             
             loadLevel();
+            validateButton.disabled = false; // **CORREÇÃO**: Garante que o botão validar esteja habilitado
         }
 
-        // --- Funções de lógica do jogo (generatePropositionsForLevel, etc.) permanecem as mesmas ---
-        function nextLevel() { /* ... (sem alterações) ... */ 
+        function nextLevel() { 
             currentLevel++;
+            // Limpa seleção e feedback dos cards antes de carregar novo nível
             gameCardsData.forEach(card => card.selected = false);
             const cardElements = cardsArea.querySelectorAll('.card');
             cardElements.forEach(cardEl => {
@@ -596,170 +666,254 @@
             });
             loadLevel();
         }
-        function quitToMainMenu() { /* ... (sem alterações) ... */ 
+
+        function quitToMainMenu() { 
             playSound('click');
             stopAllMusic();
             showScreen('initial');
         }
-        function generatePropositionsForLevel() { /* ... (sem alterações) ... */ 
+
+        // --- Game Logic Functions ---
+        function generatePropositionsForLevel() { 
             currentPropositions = {};
             let numVarsToUse;
-            if (currentLevel === 0) numVarsToUse = 1;
-            else if (currentLevel <= 2) numVarsToUse = 2;
-            else if (currentLevel <= 4) numVarsToUse = 3;
-            else numVarsToUse = Math.min(currentLevel -1 , ALL_PROPOSITION_NAMES.length);
+            // Lógica para determinar o número de variáveis com base no nível
+            if (currentLevel === 0) numVarsToUse = 1;      // Nível 1: p
+            else if (currentLevel <= 2) numVarsToUse = 2; // Níveis 2-3: p, q
+            else if (currentLevel <= 4) numVarsToUse = 3; // Níveis 4-5: p, q, r
+            else numVarsToUse = Math.min(currentLevel -1 , ALL_PROPOSITION_NAMES.length); // Nível 6: p, q, r, s (ou mais se houver)
 
 
             const varsForThisLevel = ALL_PROPOSITION_NAMES.slice(0, numVarsToUse);
-            varsForThisLevel.forEach(varName => { currentPropositions[varName] = Math.random() < 0.5; });
+            varsForThisLevel.forEach(varName => {
+                currentPropositions[varName] = Math.random() < 0.5;
+            });
         }
-        function generateExpression(variables, maxDepth = 1) { /* ... (sem alterações) ... */ 
-            if (!variables || variables.length === 0) return Math.random() < 0.5 ? "p" : "¬p";
 
+        function generateExpression(variables, maxDepth = 1) { 
+            if (!variables || variables.length === 0) return Math.random() < 0.5 ? "p" : "¬p"; // Fallback
+
+            // Ajusta a profundidade máxima da expressão com base no nível atual
             let currentMaxDepth = 1;
-            if (currentLevel >= 2) currentMaxDepth = 2;
-            if (currentLevel >= 4) currentMaxDepth = 3;
-            maxDepth = Math.min(maxDepth, currentMaxDepth);
+            if (currentLevel >= 2) currentMaxDepth = 2; // Níveis 3+ podem ter expressões mais complexas
+            if (currentLevel >= 4) currentMaxDepth = 3; // Níveis 5+ ainda mais complexas
+            maxDepth = Math.min(maxDepth, currentMaxDepth); // Limita pela profundidade configurada para o nível
 
 
-            if (maxDepth <= 0 || Math.random() < 0.45) {
+            // Chance de gerar uma proposição simples (p, ¬p)
+            if (maxDepth <= 0 || Math.random() < 0.45) { // Aumentada a chance de ser simples
                 const v = variables[Math.floor(Math.random() * variables.length)];
-                return Math.random() < 0.4 ? v : `¬${v}`;
+                return Math.random() < 0.4 ? v : `¬${v}`; // Chance de negação
             }
+
             const ops = ['∧', '∨', '→'];
             const op = ops[Math.floor(Math.random() * ops.length)];
 
-            if (Math.random() < 0.15 && maxDepth > 0 && variables.length > 1) {
+            // Chance de gerar uma negação de uma subexpressão
+            if (Math.random() < 0.15 && maxDepth > 0 && variables.length > 1) { // Reduzida chance de negação complexa
                  const operand = generateExpression(variables, maxDepth -1);
                  return `¬(${operand})`;
             }
+
+            // Gera operandos recursivamente
             const left = generateExpression(variables, maxDepth - 1);
             const right = generateExpression(variables, maxDepth - 1);
             return `(${left} ${op} ${right})`;
         }
-        function getPrecedence(op) { /* ... (sem alterações) ... */ 
-            if (op === '¬') return 4; if (op === '∧') return 3;
-            if (op === '∨') return 2; if (op === '→') return 1;
-            return 0;
+
+        function getPrecedence(op) { 
+            if (op === '¬') return 4; // Negação (prefixo)
+            if (op === '∧') return 3; // Conjunção
+            if (op === '∨') return 2; // Disjunção
+            if (op === '→') return 1; // Implicação
+            return 0; // Para parênteses ou outros
         }
-        function isOperator(token) { /* ... (sem alterações) ... */ return ['¬', '∧', '∨', '→'].includes(token); }
-        function isVariable(token, propositionValues) { /* ... (sem alterações) ... */ return propositionValues.hasOwnProperty(token); }
-        function tokenize(expression) { /* ... (sem alterações) ... */ 
-            const spacedExpression = expression.replace(/¬/g, ' ¬ ').replace(/\∧/g, ' ∧ ').replace(/\∨/g, ' ∨ ').replace(/\→/g, ' → ').replace(/\(/g, ' ( ').replace(/\)/g, ' ) ').trim();
-            return spacedExpression.split(/\s+/).filter(t => t.length > 0);
+
+        function isOperator(token) { return ['¬', '∧', '∨', '→'].includes(token); }
+        function isVariable(token, propositionValues) { return propositionValues.hasOwnProperty(token); }
+
+        function tokenize(expression) { 
+            // Adiciona espaços ao redor de todos os operadores e parênteses para facilitar o split
+            const spacedExpression = expression
+                .replace(/¬/g, ' ¬ ')
+                .replace(/\∧/g, ' ∧ ')
+                .replace(/\∨/g, ' ∨ ')
+                .replace(/\→/g, ' → ')
+                .replace(/\(/g, ' ( ')
+                .replace(/\)/g, ' ) ')
+                .trim(); // Remove espaços extras no início/fim
+            return spacedExpression.split(/\s+/).filter(t => t.length > 0); // Divide por espaços e remove tokens vazios
         }
-        function infixToPostfix(tokens, propositionValues) { /* ... (sem alterações) ... */ 
-            const outputQueue = []; const operatorStack = [];
+
+        function infixToPostfix(tokens, propositionValues) { 
+            const outputQueue = [];
+            const operatorStack = [];
+
             tokens.forEach(token => {
-                if (isVariable(token, propositionValues) || token === 'true' || token === 'false') outputQueue.push(token);
-                else if (isOperator(token)) {
-                    while (operatorStack.length > 0 && isOperator(operatorStack[operatorStack.length - 1]) &&
-                           ((getPrecedence(token) <= getPrecedence(operatorStack[operatorStack.length - 1]) && token !== '¬') ||
-                            (getPrecedence(token) < getPrecedence(operatorStack[operatorStack.length - 1]) && token === '¬'))) {
+                if (isVariable(token, propositionValues) || token === 'true' || token === 'false') {
+                    outputQueue.push(token);
+                } else if (isOperator(token)) {
+                    while (
+                        operatorStack.length > 0 &&
+                        isOperator(operatorStack[operatorStack.length - 1]) &&
+                        (
+                            // Operadores com menor ou igual precedência (esquerda-associativos)
+                            (getPrecedence(token) <= getPrecedence(operatorStack[operatorStack.length - 1]) && token !== '¬') ||
+                            // Operador de negação (direita-associativo, maior precedência)
+                            (getPrecedence(token) < getPrecedence(operatorStack[operatorStack.length - 1]) && token === '¬')
+                        )
+                    ) {
                         outputQueue.push(operatorStack.pop());
                     }
                     operatorStack.push(token);
-                } else if (token === '(') operatorStack.push(token);
-                else if (token === ')') {
-                    while (operatorStack.length > 0 && operatorStack[operatorStack.length - 1] !== '(') outputQueue.push(operatorStack.pop());
-                    if (operatorStack.length > 0 && operatorStack[operatorStack.length - 1] === '(') operatorStack.pop();
-                    else { console.error("Parênteses não correspondentes em infixToPostfix (faltando '('). Expressão:", tokens.join(" ")); throw new Error("Parênteses não correspondentes"); }
-                } else { console.error("Token desconhecido em infixToPostfix:", token, "Expressão:", tokens.join(" ")); throw new Error(`Token desconhecido: ${token}`); }
+                } else if (token === '(') {
+                    operatorStack.push(token);
+                } else if (token === ')') {
+                    while (operatorStack.length > 0 && operatorStack[operatorStack.length - 1] !== '(') {
+                        outputQueue.push(operatorStack.pop());
+                    }
+                    if (operatorStack.length > 0 && operatorStack[operatorStack.length - 1] === '(') {
+                        operatorStack.pop(); // Descarta o '('
+                    } else {
+                        // Erro: parênteses não correspondentes
+                        console.error("Parênteses não correspondentes em infixToPostfix (faltando '('). Expressão:", tokens.join(" "));
+                        throw new Error("Parênteses não correspondentes");
+                    }
+                } else {
+                    console.error("Token desconhecido em infixToPostfix:", token, "Expressão:", tokens.join(" "));
+                    throw new Error(`Token desconhecido: ${token}`);
+                }
             });
+
             while (operatorStack.length > 0) {
-                if (operatorStack[operatorStack.length - 1] === '(') { console.error("Parênteses não correspondentes em infixToPostfix (pilha). Expressão:", tokens.join(" ")); throw new Error("Parênteses não correspondentes na pilha"); }
+                if (operatorStack[operatorStack.length - 1] === '(') {
+                    // Erro: parênteses não correspondentes
+                    console.error("Parênteses não correspondentes em infixToPostfix (pilha). Expressão:", tokens.join(" "));
+                    throw new Error("Parênteses não correspondentes na pilha");
+                }
                 outputQueue.push(operatorStack.pop());
             }
             return outputQueue;
         }
-        function evaluateRPN(rpnQueue, propositionValues) { /* ... (sem alterações) ... */ 
+
+        function evaluateRPN(rpnQueue, propositionValues) { 
             const stack = [];
             rpnQueue.forEach(token => {
-                if (isVariable(token, propositionValues)) stack.push(propositionValues[token]);
-                else if (token === 'true') stack.push(true);
-                else if (token === 'false') stack.push(false);
-                else if (isOperator(token)) {
+                if (isVariable(token, propositionValues)) {
+                    stack.push(propositionValues[token]);
+                } else if (token === 'true') { // Para casos onde 'true'/'false' podem ser parte da expressão (não usado atualmente)
+                    stack.push(true);
+                } else if (token === 'false') {
+                    stack.push(false);
+                } else if (isOperator(token)) {
                     if (token === '¬') {
                         if (stack.length < 1) { console.error("RPN inválido para ¬. Fila:", rpnQueue, "Valores:", propositionValues, "Pilha:", stack); throw new Error("Operandos insuficientes para ¬"); }
                         stack.push(!stack.pop());
-                    } else {
+                    } else { // Operadores binários
                         if (stack.length < 2) { console.error(`RPN inválido para ${token}. Fila:`, rpnQueue, "Valores:", propositionValues, "Pilha:", stack); throw new Error(`Operandos insuficientes para ${token}`);}
-                        const b = stack.pop(); const a = stack.pop();
+                        const b = stack.pop(); // Segundo operando
+                        const a = stack.pop(); // Primeiro operando
                         if (token === '∧') stack.push(a && b);
                         else if (token === '∨') stack.push(a || b);
-                        else if (token === '→') stack.push(!a || b);
+                        else if (token === '→') stack.push(!a || b); // Implicação: a → b é ¬a ∨ b
                     }
-                } else { console.error("Token desconhecido em RPN. Fila:", rpnQueue, "Token:", token); throw new Error(`Token RPN desconhecido: ${token}`); }
+                } else {
+                    console.error("Token desconhecido em RPN. Fila:", rpnQueue, "Token:", token);
+                    throw new Error(`Token RPN desconhecido: ${token}`);
+                }
             });
-            if (stack.length !== 1) { console.error("Resultado RPN inválido. Fila:", rpnQueue, "Valores:", propositionValues, "Pilha Final:", stack); throw new Error("Pilha final RPN não tem tamanho 1");}
+
+            if (stack.length !== 1) {
+                console.error("Resultado RPN inválido. Fila:", rpnQueue, "Valores:", propositionValues, "Pilha Final:", stack);
+                throw new Error("Pilha final RPN não tem tamanho 1");
+            }
             return stack[0];
         }
-        function evaluateBooleanExpression(expressionString, propositionValues) { /* ... (sem alterações) ... */ 
+        
+        function evaluateBooleanExpression(expressionString, propositionValues) { 
             try {
                 const tokens = tokenize(expressionString);
                 const rpn = infixToPostfix(tokens, propositionValues);
                 return evaluateRPN(rpn, propositionValues);
             } catch (error) {
-                return false;
+                console.error(`Erro ao avaliar expressão "${expressionString}":`, error);
+                return false; // Retorna false em caso de erro na avaliação
             }
         }
-        function loadLevel() { /* ... (sem alterações) ... */ 
+
+        function loadLevel() { 
             generatePropositionsForLevel();
             gameCardsData = [];
             const numCards = CARDS_PER_LEVEL[currentLevel];
             const varsForLevel = Object.keys(currentPropositions);
+
+            // Garante que haja pelo menos uma variável se nenhuma for gerada (caso raro)
             if (varsForLevel.length === 0) {
-                varsForLevel.push('p');
-                if (!currentPropositions.hasOwnProperty('p')) currentPropositions['p'] = Math.random() < 0.5;
+                varsForLevel.push('p'); // Adiciona 'p' como fallback
+                if (!currentPropositions.hasOwnProperty('p')) { // Se 'p' não foi definido
+                    currentPropositions['p'] = Math.random() < 0.5;
+                }
             }
-            let complexity = Math.floor(currentLevel / 2) + 1;
+
+            let complexity = Math.floor(currentLevel / 2) + 1; // Aumenta complexidade com o nível
             let trueCount = 0, falseCount = 0;
-            let generatedExpressions = new Set();
+            let generatedExpressions = new Set(); // Para evitar expressões duplicadas no mesmo nível
 
             for (let i = 0; i < numCards; i++) {
                 let expr, val, attempts = 0;
-                const MAX_GENERATION_ATTEMPTS = 60;
+                const MAX_GENERATION_ATTEMPTS = 60; // Limite de tentativas para evitar loops infinitos
                 do {
                     expr = generateExpression(varsForLevel, complexity);
+                    // Se a expressão já foi gerada e ainda temos muitas tentativas, tenta de novo
                     if (generatedExpressions.has(expr) && attempts < MAX_GENERATION_ATTEMPTS -10) {
-                        attempts++; continue;
+                        attempts++;
+                        continue;
                     }
                     val = evaluateBooleanExpression(expr, currentPropositions);
                     attempts++;
-                    if (numCards > 2 && i < numCards -1) {
-                        if (trueCount === i && val && i > 0) continue;
-                        if (falseCount === i && !val && i > 0) continue;
+                    // Tenta balancear um pouco o número de verdadeiros e falsos, se não for o último card
+                    if (numCards > 2 && i < numCards -1) { // Não força no último card
+                        if (trueCount === i && val && i > 0) continue; // Evita todos verdadeiros se possível
+                        if (falseCount === i && !val && i > 0) continue; // Evita todos falsos se possível
                     }
-                } while (attempts < MAX_GENERATION_ATTEMPTS && generatedExpressions.has(expr));
+                } while (attempts < MAX_GENERATION_ATTEMPTS && generatedExpressions.has(expr)); // Continua se duplicado e ainda há tentativas
 
                 generatedExpressions.add(expr);
                 if (val) trueCount++; else falseCount++;
                 gameCardsData.push({ id: `card-${i}`, expression: expr, evaluatesToTrue: val, selected: false });
             }
 
+            // Se todos os cards gerados são V ou todos F (e há mais de 1 card), tenta inverter um para balancear
             if (numCards > 1 && (trueCount === 0 || falseCount === 0) && gameCardsData.length === numCards) {
+                console.warn(`Nível ${currentLevel+1}: Todos os cards são ${trueCount === 0 ? 'FALSOS' : 'VERDADEIROS'}. Tentando inverter um.`);
                 let candidateIndices = [];
                 for(let k=0; k < numCards; k++) candidateIndices.push(k);
-                candidateIndices.sort(() => Math.random() - 0.5);
+                candidateIndices.sort(() => Math.random() - 0.5); // Embaralha para pegar um aleatório
+
                 let flipped = false;
                 for (const idxToFlip of candidateIndices) {
                     let originalExpr = gameCardsData[idxToFlip].expression;
                     let newExpr;
+                    // Tenta uma negação simples
                     if (originalExpr.startsWith("¬(") && originalExpr.endsWith(")")) {
-                        newExpr = originalExpr.substring(2, originalExpr.length -1);
+                        newExpr = originalExpr.substring(2, originalExpr.length -1); // Remove ¬()
                     } else {
-                        newExpr = `¬(${originalExpr})`;
+                        newExpr = `¬(${originalExpr})`; // Adiciona ¬()
                     }
                     let newValue = evaluateBooleanExpression(newExpr, currentPropositions);
-                    if (newValue !== gameCardsData[idxToFlip].evaluatesToTrue) {
+                    // Se o novo valor for diferente e a nova expressão não estiver já em uso
+                    if (newValue !== gameCardsData[idxToFlip].evaluatesToTrue && !generatedExpressions.has(newExpr)) {
                         gameCardsData[idxToFlip].expression = newExpr;
                         gameCardsData[idxToFlip].evaluatesToTrue = newValue;
+                        generatedExpressions.add(newExpr); // Adiciona a nova expressão ao conjunto
                         flipped = true;
-                        break;
+                        console.log(`Card ${idxToFlip} invertido para garantir variedade.`);
+                        break; 
                     }
                 }
+                // Se mesmo assim não conseguiu inverter (caso raro), força a inversão do primeiro card
                 if (!flipped && numCards > 0) {
-                    const idxToFlip = 0;
+                    const idxToFlip = 0; // Pega o primeiro card
                      let originalExpr = gameCardsData[idxToFlip].expression;
                     if (originalExpr.startsWith("¬(") && originalExpr.endsWith(")")) {
                         gameCardsData[idxToFlip].expression = originalExpr.substring(2, originalExpr.length -1);
@@ -767,12 +921,15 @@
                         gameCardsData[idxToFlip].expression = `¬(${originalExpr})`;
                     }
                     gameCardsData[idxToFlip].evaluatesToTrue = !gameCardsData[idxToFlip].evaluatesToTrue;
+                    console.log(`Forçada inversão do card 0 para garantir variedade.`);
                 }
             }
             renderGame();
         }
-        function renderPropositions() { /* ... (sem alterações) ... */ 
-            propositionsArea.innerHTML = '';
+
+        // --- Rendering Functions ---
+        function renderPropositions() { 
+            propositionsArea.innerHTML = ''; // Limpa área
             for (const prop in currentPropositions) {
                 const span = document.createElement('span');
                 span.className = `proposition-display ${currentPropositions[prop] ? 'proposition-true' : 'proposition-false'}`;
@@ -780,122 +937,153 @@
                 propositionsArea.appendChild(span);
             }
         }
-        function renderCards() { /* ... (sem alterações) ... */ 
-            cardsArea.innerHTML = '';
+
+        function renderCards() { 
+            cardsArea.innerHTML = ''; // Limpa área
             gameCardsData.forEach((cardData, index) => {
                 const cardDiv = document.createElement('div');
                 cardDiv.id = cardData.id;
-                cardDiv.className = 'card';
-                cardDiv.classList.toggle('selected', cardData.selected);
+                cardDiv.className = 'card'; // Classe base
+                cardDiv.classList.toggle('selected', cardData.selected); // Adiciona 'selected' se aplicável
+                
                 const expressionP = document.createElement('p');
                 expressionP.textContent = cardData.expression;
                 cardDiv.appendChild(expressionP);
+
                 cardDiv.addEventListener('click', () => handleCardClick(index));
                 cardsArea.appendChild(cardDiv);
             });
         }
-        function renderUIState() { /* ... (sem alterações) ... */ 
+
+        function renderUIState() { 
             currentLevelDisplay.textContent = currentLevel + 1;
-            livesDisplay.innerHTML = '';
+            livesDisplay.innerHTML = ''; // Limpa vidas
             for (let i = 0; i < lives; i++) {
                 const heartSpan = document.createElement('span');
-                heartSpan.textContent = '❤';
+                heartSpan.textContent = '❤'; // Coração para vida
                 heartSpan.classList.add('heart-icon');
                 livesDisplay.appendChild(heartSpan);
             }
         }
-        function renderGame() { /* ... (sem alterações) ... */ 
-            renderPropositions(); renderCards(); renderUIState();
+
+        function renderGame() { 
+            renderPropositions();
+            renderCards();
+            renderUIState();
         }
-        function handleCardClick(index) { /* ... (sem alterações) ... */ 
+
+        // --- Event Handlers ---
+        function handleCardClick(index) { 
             playSound('click');
             gameCardsData[index].selected = !gameCardsData[index].selected;
+            // Atualiza a classe 'selected' no elemento DOM do card
             document.getElementById(gameCardsData[index].id).classList.toggle('selected', gameCardsData[index].selected);
         }
-        function handleValidate() { /* ... (sem alterações) ... */ 
+
+        function handleValidate() { 
+            validateButton.disabled = true; // **CORREÇÃO**: Desabilita o botão
             playSound('click');
             let allCorrect = true;
+
+            // Remove feedback visual anterior
             gameCardsData.forEach(card => {
                 const cardDiv = document.getElementById(card.id);
                 if (cardDiv) cardDiv.classList.remove('feedback-correct', 'feedback-incorrect');
             });
 
+            // Verifica se a seleção está correta
             for (const card of gameCardsData) {
                 if ((card.selected && !card.evaluatesToTrue) || (!card.selected && card.evaluatesToTrue)) {
                     allCorrect = false;
-                    break;
+                    break; 
                 }
             }
 
             if (allCorrect) {
                 playSound('correct');
+                // Adiciona feedback visual de acerto
                 gameCardsData.forEach(card => {
-                    if (card.selected && card.evaluatesToTrue) {
+                    if (card.selected && card.evaluatesToTrue) { // Ou apenas card.evaluatesToTrue, se for para mostrar todos os corretos
                         const cardDiv = document.getElementById(card.id);
                         if (cardDiv) cardDiv.classList.add('feedback-correct');
                     }
                 });
+
                 setTimeout(() => {
                     if (currentLevel + 1 >= MAX_LEVELS) {
                         playSound('victory');
                         showScreen('victory');
+                        // Botão de validar permanece desabilitado na tela de vitória
                     } else {
                         nextLevel();
+                        validateButton.disabled = false; // **CORREÇÃO**: Reabilita o botão para o próximo nível
                     }
-                }, 1200);
+                }, 1200); // Tempo para mostrar o feedback
             } else {
                 playSound('wrong');
                 lives--;
-                renderUIState();
+                renderUIState(); // Atualiza display de vidas
 
                 if (lives <= 0) {
+                    // Mostra feedback final de quais eram corretos/incorretos na derrota
                     gameCardsData.forEach(card => {
                         const cardDiv = document.getElementById(card.id);
                         if (!cardDiv) return;
                         if ((card.selected && !card.evaluatesToTrue) || (!card.selected && card.evaluatesToTrue)) {
-                            cardDiv.classList.add('feedback-incorrect');
-                        } else if (card.selected && card.evaluatesToTrue) {
+                            cardDiv.classList.add('feedback-incorrect'); // Seleção errada
+                        } else if (card.selected && card.evaluatesToTrue) { // Seleção correta (já marcada)
                              cardDiv.classList.add('feedback-correct');
+                        } else if (!card.selected && card.evaluatesToTrue) { // Não selecionou um que era correto
+                            cardDiv.classList.add('feedback-correct'); // Mostra que era correto
                         }
                     });
                     playSound('defeat');
                     showScreen('defeat');
+                    // Botão de validar permanece desabilitado na tela de derrota
                 } else {
+                    // Mostra modal de erro, mas ainda tem vidas
                     showModal("Incorreto!", `Você ainda tem ${lives} ${lives === 1 ? 'vida restante' : 'vidas restantes'}.<br>Analise novamente e corrija sua seleção.`, () => {
+                        validateButton.disabled = false; // **CORREÇÃO**: Reabilita o botão após fechar o modal
                     });
                 }
             }
         }
 
-        // --- Event Listeners ---
+        // --- Event Listeners Setup ---
         playButton.addEventListener('click', async () => { 
             console.log("Botão 'Jogar' clicado.");
+            showScreen('loading'); // Mostra a tela de carregamento
             
-            const contextNowReady = await ensureAudioContextStarted();
+            const contextNowReady = await ensureAudioContextStarted(); // Tenta iniciar o contexto de áudio
             if (!contextNowReady) {
                 console.warn("playButton: AudioContext não pôde ser iniciado. O jogo continuará com funcionalidade de som limitada.");
+                // Mesmo se o contexto falhar, tenta configurar os sons (eles podem não tocar)
                 if (!soundsReady) setupSounds(); 
-                await startGame(); // Tenta iniciar o jogo mesmo assim
+                // Não espera Tone.loaded() se o contexto falhou, pois pode travar
+                playSound('click'); // Tenta tocar o clique mesmo assim (pode não funcionar)
+                await startGame(); 
+                showScreen('game'); // Esconde o carregamento e mostra o jogo
                 return;
             }
 
+            // Se o contexto de áudio iniciou, configura os sons se ainda não estiverem prontos
             if (!soundsReady) {
                 console.log("playButton: Chamando setupSounds() pois soundsReady é false.");
                 setupSounds(); 
             }
             
-            // Espera que todos os buffers do Tone.js (MP3s) estejam carregados
             console.log("playButton: Esperando Tone.loaded()...");
             try {
-                await Tone.loaded();
+                await Tone.loaded(); // Espera o carregamento de todos os buffers de áudio
                 console.log("playButton: Tone.loaded() resolvido. Todos os buffers carregados.");
             } catch (e) {
                 console.error("playButton: Erro ao esperar Tone.loaded():", e);
-                // O jogo continuará, mas as músicas MP3 podem não tocar se não carregaram.
+                // O jogo continua mesmo se houver erro no carregamento de áudio
             }
             
             playSound('click'); 
             await startGame(); 
+            showScreen('game'); // Esconde o carregamento e mostra o jogo
         });
 
         howToPlayButton.addEventListener('click', async () => {
@@ -909,24 +1097,36 @@
             howToPlayModal.style.display = 'none';
         });
 
+        // Adiciona listeners aos botões de toggle de som (ambos os conjuntos)
         [musicToggleButtonInitial, musicToggleButtonGame].forEach(btn => btn?.addEventListener('click', toggleMusic)); 
         [sfxToggleButtonInitial, sfxToggleButtonGame].forEach(btn => btn?.addEventListener('click', toggleSfx)); 
 
         validateButton.addEventListener('click', handleValidate); 
         quitLevelButton.addEventListener('click', quitToMainMenu); 
 
+        // Listeners para botões de "Jogar Novamente" e "Menu Principal" nas telas de vitória/derrota
         victoryPlayAgainButton.addEventListener('click', async () => { 
             if (!audioContextStarted) await ensureAudioContextStarted();
             playSound('click'); 
+            showScreen('loading'); // Adiciona tela de carregamento aqui também
+            await Tone.loaded(); // Garante que os sons estejam prontos se o usuário clicar rápido
             await startGame(); 
+            showScreen('game');
         });
         victoryMainMenuButton.addEventListener('click', quitToMainMenu);
+
         defeatPlayAgainButton.addEventListener('click', async () => { 
             if (!audioContextStarted) await ensureAudioContextStarted();
             playSound('click'); 
+            showScreen('loading'); // Adiciona tela de carregamento aqui também
+            await Tone.loaded();
             await startGame();
+            showScreen('game');
         });
         defeatMainMenuButton.addEventListener('click', quitToMainMenu);
+
+        // Listener para o botão de fechar do modal de mensagem genérico
+        // (O listener é recriado em showModal, mas este é um fallback ou para o estado inicial)
         modalCloseButton.addEventListener('click', async () => { 
             if (!audioContextStarted) await ensureAudioContextStarted();
             playSound('click'); 
@@ -934,9 +1134,11 @@
         });
 
         // --- Initial Game Setup ---
-        showScreen('initial');
-        updateSoundButtonStates(); 
+        showScreen('initial'); // Mostra a tela inicial ao carregar
+        updateSoundButtonStates(); // Define o estado inicial dos botões de som
         console.log("Configuração inicial: Tela inicial mostrada. musicOn:", musicOn, "sfxOn:", sfxOn);
+        // A configuração dos sons (setupSounds) será chamada quando o usuário interagir pela primeira vez (ex: clicar em Jogar)
+        // para tentar iniciar o AudioContext após um gesto do usuário, como recomendado pelos navegadores.
     </script>
 </body>
 </html>
